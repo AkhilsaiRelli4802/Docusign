@@ -1,0 +1,266 @@
+/* --- S3: API Key Wall --- */
+.locked-blur {
+  filter: blur(3px);
+  opacity: 0.35;
+  pointer-events: none;
+  user-select: none;
+  transition: all 0.5s ease;
+}
+
+.api-key-overlay-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(8, 10, 16, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  text-align: center;
+}
+
+.api-key-modal {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-card);
+  padding: 40px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lock-icon-container {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lock-icon-bg {
+  width: 100%;
+  height: 100%;
+  background: rgba(34, 37, 58, 1);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.lock-svg {
+  color: var(--warning);
+}
+
+.pulse-ring-1, .pulse-ring-2 {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  border-radius: 20px;
+  border: 2px solid var(--warning);
+  z-index: 1;
+  animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+}
+
+.pulse-ring-2 {
+  animation-delay: 1s;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.api-key-modal h2 {
+  color: #fff;
+  font-size: 24px;
+  margin-bottom: 12px;
+}
+
+.api-key-modal .subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 32px;
+  padding: 0 16px;
+}
+
+.api-key-form {
+  width: 100%;
+}
+
+.key-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.key-input-wrapper input.mono-input {
+  width: 100%;
+  padding: 14px 48px 14px 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 30px;
+  color: #fff;
+  font-family: monospace;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.key-input-wrapper.default input:focus {
+  border-color: rgba(255,255,255,0.3);
+  background: rgba(255,255,255,0.06);
+}
+
+.key-input-wrapper.filled input {
+  border-color: rgba(255,255,255,0.3);
+}
+
+.key-input-wrapper.error input {
+  border-color: rgba(239, 68, 68, 0.5);
+  color: var(--failed-red);
+}
+
+.key-input-wrapper.success input {
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+.toggle-key-visibility {
+  position: absolute;
+  right: 16px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.toggle-key-visibility:hover, .toggle-key-visibility.active {
+  color: #fff;
+}
+
+.activation-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 30px;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.activation-btn.idle, .activation-btn.default {
+  background: var(--elevated);
+  color: var(--text-secondary);
+}
+
+.activation-btn.filled {
+  background: linear-gradient(135deg, var(--electric-indigo), var(--sky-blue));
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+}
+
+.activation-btn.loading {
+  background: var(--sky-blue);
+  color: #fff;
+  pointer-events: none;
+}
+
+.activation-btn.error {
+  background: var(--elevated);
+  color: var(--text-secondary);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.error-message {
+  color: var(--failed-red);
+  background: rgba(239, 68, 68, 0.1);
+  padding: 10px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.security-badges {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.encryption-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.zero-knowledge-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--success);
+  background: rgba(34, 197, 94, 0.1);
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  margin: 0 auto;
+}
+
+.success-toast {
+  position: absolute;
+  top: 32px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  backdrop-filter: blur(8px);
+  color: var(--success);
+  padding: 12px 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+  font-size: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+  z-index: 1001;
+}
+
+.toast-dot-green {
+  width: 8px; height: 8px;
+  background: var(--success);
+  border-radius: 50%;
+  box-shadow: 0 0 10px var(--success);
+}
+
+.spinner-small {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+}
+
+.nav-item.locked {
+  opacity: 0.5;
+  pointer-events: none;
+}

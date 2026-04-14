@@ -1,29 +1,37 @@
 import React, { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User, Bot, Sparkles, Loader2, Files, ArrowRight } from 'lucide-react';
+import { Send, User, Files, Paperclip, ArrowRight } from 'lucide-react';
 import Documents from './Documents';
+import './Dashboard.css';
 
 const Dashboard = () => {
   const [messages, setMessages] = useState([
-    { role: 'assistant', text: "Hello! I'm your DocuMind agent. Ask me anything about your uploaded documents." }
+    { 
+      role: 'assistant', 
+      text: "Hello! I've indexed your documents in your vault. Ask me anything about them.",
+      isInitial: true
+    }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [docCount, setDocCount] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [isReady, setIsReady] = useState(false);
   const chatEndRef = useRef(null);
 
-  const checkDocs = async () => {
+  const fetchData = async () => {
     try {
       const res = await axios.get('http://localhost:5000/api/documents');
-      setDocCount(res.data.length);
+      setDocuments(res.data);
     } catch (err) {
-      console.error('Failed to fetch doc count');
+      console.error('Failed to fetch data');
+    } finally {
+      setIsReady(true);
     }
   };
 
   useEffect(() => {
-    checkDocs();
+    fetchData();
   }, []);
 
   const scrollToBottom = () => {
@@ -55,7 +63,7 @@ const Dashboard = () => {
     } catch (err) {
       setMessages(prev => [...prev, { 
         role: 'assistant', 
-        text: "I'm sorry, I encountered an error. Please check your OpenAI key in document settings.",
+        text: "I'm sorry, I encountered an error. Please verify your index in Document settings.",
         isError: true 
       }]);
     } finally {
@@ -63,15 +71,14 @@ const Dashboard = () => {
     }
   };
 
-  if (docCount === null) return (
+  if (!isReady) return (
     <div className="loading-screen">
-      <div className="modern-loader">
-        <span></span><span></span><span></span>
-      </div>
+      <div className="spinner-small" style={{width: 32, height: 32}}></div>
     </div>
   );
 
   // IF NO DOCUMENTS: Show the Documents component instead of chat
+  const docCount = documents.length;
   if (docCount === 0) {
     return (
       <motion.div 
@@ -84,66 +91,105 @@ const Dashboard = () => {
     );
   }
 
+  const renderBadge = (msg) => {
+    if (msg.role !== 'assistant' || msg.isInitial || msg.isError) return null;
+
+    if (!msg.usedRAG) {
+      return (
+        <div className="msg-badge none">
+          <div className="badge-dot" style={{ background: '#777' }}></div>
+          General knowledge
+        </div>
+      );
+    }
+
+    const match = Math.round(msg.similarity * 100);
+    const isHigh = msg.similarity >= 0.91;
+
+    return (
+      <div className={`msg-badge ${isHigh ? 'high' : 'mid'}`}>
+        <div className="badge-dot"></div>
+        {isHigh ? 'Fact-checked via Documents' : 'From Documents'} · {match}% match
+      </div>
+    );
+  };
+
   return (
     <div className="chat-container">
-      <div className="chat-header">
-        <Sparkles size={20} className="glow-icon" />
-        <div>
-          <h3>AI Knowledge Agent</h3>
-          <p>Trained on {docCount} of your documents</p>
-        </div>
+      {/* A1: Context Bar */}
+      <div className="context-bar">
+        <span className="context-label">Context:</span>
+        {documents.slice(0, 2).map((doc, idx) => (
+           <div key={idx} className="doc-pill">
+             <Files size={12} />
+             {doc.fileName || doc.title}
+           </div>
+        ))}
+        {docCount > 2 && <span className="doc-pill-more">+{docCount - 2} more</span>}
       </div>
 
       <div className="chat-messages">
-        <AnimatePresence>
-          {messages.map((msg, index) => (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              key={index} 
-              className={`message-wrapper ${msg.role}`}
-            >
-              <div className={`avatar ${msg.role}`}>
-                {msg.role === 'user' ? <User size={18} /> : <Bot size={18} />}
-              </div>
-              <div className={`message-bubble ${msg.role} ${msg.isError ? 'error' : ''}`}>
-                <div className="message-content">{msg.text}</div>
-                {msg.usedRAG && (
-                  <div className="rag-badge">
-                    <Sparkles size={12} />
-                    <span>Fact-checked via Documents ({Math.round(msg.similarity * 100)}% match)</span>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          ))}
-          {loading && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="message-wrapper assistant">
-              <div className="avatar assistant"><Bot size={18} /></div>
-              <div className="message-bubble assistant typing">
-                <div className="modern-loader" style={{ padding: 0 }}>
-                  <span></span><span></span><span></span>
+        {messages.map((msg, index) => (
+          <div key={index} style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+            <div className={`message-wrapper ${msg.role}`} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+              {msg.role === 'assistant' && (
+                <div className="avatar assistant">
+                   <div style={{ background: 'white', width: 14, height: 14, borderRadius: '50%' }}></div>
                 </div>
+              )}
+              
+              <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '80%', alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                 <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: 5 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    className={`message-bubble ${msg.role} ${msg.isError ? 'error' : ''}`}
+                 >
+                    {msg.text}
+                 </motion.div>
+                 {renderBadge(msg)}
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+
+              {msg.role === 'user' && (
+                <div className="avatar user">
+                   <User size={16} />
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+        
+        {loading && (
+          <div className="message-wrapper assistant" style={{ display: 'flex', gap: '12px' }}>
+            <div className="avatar assistant">
+               <div style={{ background: 'white', width: 14, height: 14, borderRadius: '50%' }}></div>
+            </div>
+            <div className="message-bubble assistant">
+               <div className="typing-dots">
+                 <div className="typing-dot"></div>
+                 <div className="typing-dot"></div>
+                 <div className="typing-dot"></div>
+               </div>
+            </div>
+          </div>
+        )}
         <div ref={chatEndRef} />
       </div>
 
       <div className="chat-input-wrapper">
-        <form onSubmit={handleSend} className="chat-form glass">
-          <input 
+        <form onSubmit={handleSend} className="chat-input-pill">
+           <input 
             type="text" 
-            placeholder="Ask a question about your files..." 
+            placeholder="Ask anything about your docs..." 
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={loading}
           />
-          <button type="submit" disabled={!input.trim() || loading}>
-            <Send size={20} />
+          <Paperclip size={18} className="attachment-btn" />
+          <button type="submit" className={`send-btn ${input.trim() ? 'active' : ''}`} disabled={!input.trim() || loading}>
+            <ArrowRight size={22} />
           </button>
         </form>
+        <p className="chat-footer-text">DocuMind only answers from your indexed documents when relevant</p>
       </div>
     </div>
   );

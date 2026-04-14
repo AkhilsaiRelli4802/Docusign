@@ -1,10 +1,10 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { MessageSquare, Files, Settings, LogOut, BrainCircuit } from 'lucide-react';
+import { MessageSquare, Files, LogOut, BrainCircuit, Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 
-const Sidebar = () => {
+const Sidebar = ({ isLocked }) => {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
@@ -29,18 +29,22 @@ const Sidebar = () => {
         {navItems.map((item) => (
           <NavLink 
             key={item.path} 
-            to={item.path} 
-            className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}
+            to={isLocked ? '#' : item.path} 
+            className={({ isActive }) => `nav-item ${isActive && !isLocked ? 'active' : ''} ${isLocked ? 'locked' : ''}`}
+            onClick={(e) => {
+              if (isLocked) e.preventDefault();
+            }}
           >
             {item.icon}
             <span>{item.label}</span>
+            {isLocked && <Lock size={14} className="nav-lock-icon" style={{ marginLeft: 'auto', opacity: 0.5 }} />}
           </NavLink>
         ))}
       </nav>
 
       <div className="sidebar-footer">
         <div className="user-profile">
-          <div className="user-avatar">{user?.email?.[0].toUpperCase()}</div>
+          <div className="user-avatar">{user?.email?.[0].toUpperCase() || 'U'}</div>
           <div className="user-info">
             <span className="user-email">{user?.email}</span>
           </div>
