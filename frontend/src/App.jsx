@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Documents from './pages/Documents';
 import Sidebar from './components/Sidebar';
+import ApiKeyOverlay from './components/ApiKeyOverlay';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -17,11 +18,16 @@ const ProtectedRoute = ({ children }) => {
   
   if (!user) return <Navigate to="/login" />;
   
+  const isLocked = !user.hasKey;
+
   return (
     <div className="app-container">
-      <Sidebar />
-      <main className="main-content">
-        {children}
+      <Sidebar isLocked={isLocked} />
+      <main className="main-content" style={{ position: 'relative' }}>
+        <div className={`content-wrapper ${isLocked ? 'locked-blur' : ''}`} style={{ height: '100%' }}>
+          {children}
+        </div>
+        {isLocked && <ApiKeyOverlay />}
       </main>
     </div>
   );

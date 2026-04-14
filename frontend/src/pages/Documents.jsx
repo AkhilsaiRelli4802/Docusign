@@ -2,17 +2,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileUp, FileText, Trash2, CheckCircle, AlertCircle, Loader2, X, Key, ShieldCheck, Lock } from 'lucide-react';
+import { Folder, FileText, Trash2, ArrowDown, Paperclip, AlertCircle, FileUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import './Documents.css';
 
 const Documents = () => {
-  const { user, updateOpenAIKey } = useAuth();
+  const { user } = useAuth();
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState(null);
-  const [newKey, setNewKey] = useState('');
-  const [keySubmitting, setKeySubmitting] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [pendingUpload, setPendingUpload] = useState(null); // { fileName, stage, progress, status, error }
 
   const fetchDocuments = async () => {
     try {
@@ -26,25 +27,33 @@ const Documents = () => {
   };
 
   useEffect(() => {
-    if (user?.hasKey) {
+    if (user && user.hasKey) {
       fetchDocuments();
     } else {
       setLoading(false);
     }
   }, [user]);
 
-  const handleKeySubmit = async (e) => {
-    e.preventDefault();
-    if (!newKey.trim()) return;
-    setKeySubmitting(true);
-    try {
-      await updateOpenAIKey(newKey);
-      setMessage({ type: 'success', text: 'OpenAI API key saved securely!' });
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to update key' });
-    } finally {
-      setKeySubmitting(false);
-    }
+  const simulateProgress = (fileName) => {
+    setPendingUpload({ fileName, stage: 1, progress: 0, status: 'processing' });
+    
+    // Stage 1 -> 2 (1s)
+    setTimeout(() => setPendingUpload(prev => prev ? { ...prev, stage: 2 } : null), 1200);
+    
+    // Stage 2 -> 3 (3s)
+    setTimeout(() => {
+        setPendingUpload(prev => prev ? { ...prev, stage: 3, progress: 10 } : null);
+        // Animate progress to 72%
+        const interval = setInterval(() => {
+            setPendingUpload(prev => {
+                if (!prev || prev.progress >= 72 || prev.stage !== 3) {
+                    clearInterval(interval);
+                    return prev;
+                }
+                return { ...prev, progress: prev.progress + 2 };
+            });
+        }, 100);
+    }, 3000);
   };
 
   const onDrop = useCallback(async (acceptedFiles) => {
@@ -56,20 +65,29 @@ const Documents = () => {
 
     setUploading(true);
     setMessage(null);
+    simulateProgress(file.name);
 
     try {
       await axios.post('http://localhost:5000/api/documents/upload', formData);
-      setMessage({ type: 'success', text: 'Document indexed successfully!' });
-      fetchDocuments();
+      setPendingUpload(prev => prev ? { ...prev, stage: 4, progress: 100 } : null);
+      
+      // Delay for success animation before refreshing
+      setTimeout(() => {
+          setPendingUpload(null);
+          setUploading(false);
+          fetchDocuments();
+          setMessage({ type: 'success', text: 'Document indexed successfully!' });
+      }, 1500);
     } catch (err) {
-      setMessage({ type: 'error', text: err.response?.data?.message || 'Upload failed' });
-    } finally {
+      setPendingUpload(prev => prev ? { ...prev, status: 'failed', error: err.response?.data?.message || 'Upload failed' } : null);
       setUploading(false);
     }
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
     onDrop,
+    noClick: true,
+    noKeyboard: true,
     accept: {
       'application/pdf': ['.pdf'],
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
@@ -77,7 +95,7 @@ const Documents = () => {
       'text/csv': ['.csv'],
     },
     multiple: false,
-    disabled: !user?.hasKey
+    disabled: !user?.hasKey || uploading
   });
 
   const deleteDoc = async (id) => {
@@ -87,133 +105,257 @@ const Documents = () => {
       setMessage({ type: 'success', text: 'Document removed' });
     } catch (err) {
       setMessage({ type: 'error', text: 'Failed to delete' });
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
-  return (
-    <div className="page-container">
-      <div className="page-header">
-        <h1 className="brand-font">My Documents</h1>
-        <p>Upload files to teach your AI agent about your business or research.</p>
-      </div>
+  const getStats = () => {
+    const ready = documents.filter(d => d.status?.toLowerCase() === 'ready').length;
+    const processing = documents.filter(d => d.status?.toLowerCase() === 'processing').length;
+    return { total: documents.length, ready, processing };
+  };
 
+  const stats = getStats();
+
+  if (loading) {
+    return <div className="loading-screen"><div className="spinner-small" style={{width: 32, height: 32}}></div></div>;
+  }
+
+  return (
+    <div {...getRootProps()} className="vault-container">
+      <input {...getInputProps()} />
+
+      {/* Global Drag Overlay (S5-B) */}
       <AnimatePresence>
-        {message && (
+        {isDragActive && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className={`alert-toast ${message.type}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="global-drag-overlay"
           >
-            {message.type === 'success' ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
-            <span>{message.text}</span>
-            <button onClick={() => setMessage(null)}><X size={16} /></button>
+            <motion.div 
+              initial={{ scale: 0.8, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="drag-icon-container"
+            >
+               <ArrowDown size={40} color="white" />
+            </motion.div>
+            <h2>Release to upload</h2>
+            <p>File will be indexed immediately</p>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="doc-layout">
-        {!user?.hasKey ? (
+      <AnimatePresence>
+        {message && (
           <motion.div 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="setup-key-card glass"
+            initial={{ opacity: 0, y: -20, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0 }}
+            className="success-toast"
+            style={{ 
+              position: 'fixed', right: '32px', top: '32px', 
+              background: message.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : undefined,
+              borderColor: message.type === 'error' ? 'rgba(239, 68, 68, 0.2)' : undefined,
+              color: message.type === 'error' ? 'var(--failed-red)' : undefined
+            }}
           >
-            <div className="setup-header">
-              <div className="shield-icon"><ShieldCheck size={32} /></div>
-              <h3>OpenAI Key Required</h3>
-              <p>To extract text and create embeddings, we need your OpenAI API key. It will be encrypted before storage.</p>
-            </div>
-            
-            <form onSubmit={handleKeySubmit} className="inline-key-form">
-              <div className="input-wrapper">
-                <Key size={18} />
-                <input 
-                  type="password" 
-                  placeholder="Paste your sk-... key" 
-                  value={newKey}
-                  onChange={(e) => setNewKey(e.target.value)}
-                  required 
-                />
-              </div>
-              <button type="submit" className="btn-primary" disabled={keySubmitting}>
-                {keySubmitting ? 'Saving...' : 'Set API Key'}
-              </button>
-            </form>
+            {message.type === 'error' ? <AlertCircle size={16} /> : <div className="toast-dot-green"></div>}
+            {message.text}
           </motion.div>
-        ) : (
-          <div {...getRootProps()} className={`dropzone glass ${isDragActive ? 'active' : ''} ${uploading ? 'disabled' : ''}`}>
-            <input {...getInputProps()} />
-            {uploading ? (
-              <div className="upload-status">
-                <div className="doc-uploading-wrapper">
-                  <FileText strokeWidth={1} size={80} />
-                  <div className="scan-line"></div>
-                </div>
-                <h3 className="upload-text-glow">Extracting & Indexing...</h3>
-                <p>Teaching your AI agent about this document.</p>
-              </div>
-            ) : (
-              <div className="dropzone-content">
-                <div className="upload-icon-circle">
-                  <FileUp size={32} />
-                </div>
-                <h3>{isDragActive ? 'Drop it here!' : 'Click or drag a file to upload'}</h3>
-                <p>Supports PDF, DOCX, CSV, and TXT (Max 10MB)</p>
-              </div>
-            )}
-          </div>
         )}
+      </AnimatePresence>
 
-        <div className="docs-list">
-          <div className="list-header">
-            <h3>Your Library</h3>
-            <span className="count-badge">{documents.length}</span>
+      <div className="vault-header">
+        <div>
+          <h1>Your Vault</h1>
+          <p>{documents.length} document{documents.length !== 1 ? 's' : ''} indexed</p>
+        </div>
+        <button className="upload-btn-header" onClick={open} disabled={!user?.hasKey || uploading}>
+          <span>+</span> Upload
+        </button>
+      </div>
+
+      {documents.length === 0 ? (
+        /* S4: Empty State */
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`empty-dropzone ${isDragActive ? 'active' : ''}`}
+          onClick={open}
+        >
+           <Folder size={64} className="folder-icon" fill="currentColor" style={{ color: '#F59E0B' }} />
+           <h3>Drop your documents here</h3>
+           <p>Or click to browse files.<br/>Your documents are private and encrypted.</p>
+           
+           <div className="file-pills">
+             <div className="file-pill">PDF</div>
+             <div className="file-pill">DOCX</div>
+             <div className="file-pill">CSV</div>
+             <div className="file-pill">TXT</div>
+           </div>
+        </motion.div>
+      ) : (
+        /* S5: Populated State */
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <div className="stats-row">
+            <div className="stat-card">
+               <div className="stat-value total">{stats.total}</div>
+               <div className="stat-label">Documents</div>
+            </div>
+            <div className="stat-card">
+               <div className="stat-value ready">{stats.ready}</div>
+               <div className="stat-label">Ready</div>
+            </div>
+            <div className="stat-card">
+               <div className="stat-value processing">{stats.processing}</div>
+               <div className="stat-label">Processing</div>
+            </div>
           </div>
-          
-          {loading ? (
-            <div className="list-loading">
-              <div className="modern-loader">
-                <span></span><span></span><span></span>
-              </div>
-            </div>
-          ) : !user?.hasKey ? (
-            <div className="empty-state">
-              <Lock size={48} />
-              <p>Add your API key to view and manage collection.</p>
-            </div>
-          ) : documents.length === 0 ? (
-            <div className="empty-state">
-              <FileText size={48} />
-              <p>No documents yet. Upload your first one!</p>
-            </div>
-          ) : (
-            <div className="grid-list">
+
+          <div className="compact-dropzone" onClick={open}>
+            <Paperclip size={18} color="var(--text-muted)" />
+            <span>Drop another file or <span className="browse-text">browse</span></span>
+          </div>
+
+          {/* Documents List */}
+          <div className="vault-doc-list">
+            <AnimatePresence>
+              {pendingUpload && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className={`vault-doc-card ${pendingUpload.status === 'failed' ? 'upload-card-failed' : 'upload-card-processing'}`}
+                >
+                  {pendingUpload.status === 'failed' ? (
+                    <div className="doc-icon-container" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
+                       <AlertCircle size={20} color="var(--failed-red)" />
+                    </div>
+                  ) : pendingUpload.stage === 2 ? (
+                    <div className="scanning-container">
+                       <div className="scanning-beam"></div>
+                    </div>
+                  ) : pendingUpload.stage === 4 ? (
+                    <div className="doc-icon-container" style={{ background: 'rgba(34, 197, 94, 0.1)' }}>
+                       <CheckCircle size={20} color="var(--ready-green)" className="success-bounce-icon" />
+                    </div>
+                  ) : (
+                    <div className="doc-icon-container">
+                       <FileUp size={20} color="var(--electric-indigo)" />
+                    </div>
+                  )}
+
+                  <div className="doc-info-col">
+                    <h4>{pendingUpload.fileName}</h4>
+                    <p className="doc-meta-text" style={{ color: pendingUpload.status === 'failed' ? 'var(--failed-red)' : undefined }}>
+                      {pendingUpload.status === 'failed' ? 
+                         pendingUpload.error : 
+                         pendingUpload.stage === 1 ? 'Awaiting extraction...' :
+                         pendingUpload.stage === 2 ? 'Reading & extracting text...' :
+                         pendingUpload.stage === 3 ? 'Creating embeddings via OpenAI API...' :
+                         'Document ready to query!'}
+                    </p>
+
+                    {pendingUpload.status === 'failed' ? (
+                       <button className="retry-btn" onClick={() => setPendingUpload(null)}>
+                         Retry ↻
+                       </button>
+                    ) : pendingUpload.stage === 3 ? (
+                       <>
+                         <div className="vectorizing-progress-container">
+                            <div className="vectorizing-progress-fill" style={{ width: `${pendingUpload.progress}%` }}></div>
+                         </div>
+                         <div className="progress-text">
+                            <span>Indexing chunks</span>
+                            <span>{pendingUpload.progress}%</span>
+                         </div>
+                       </>
+                    ) : pendingUpload.stage < 4 ? (
+                       <div className="upload-steps">
+                          <div className="step-item">
+                             <div className={`step-dot ${pendingUpload.stage > 1 ? 'done' : 'active'}`}></div>
+                             <span className={`step-label ${pendingUpload.stage === 1 ? 'active' : ''}`}>Extract</span>
+                          </div>
+                          <div className="step-line" />
+                          <div className="step-item">
+                             <div className={`step-dot ${pendingUpload.stage > 2 ? 'done' : pendingUpload.stage === 2 ? 'active' : ''}`}></div>
+                             <span className={`step-label ${pendingUpload.stage === 2 ? 'active' : ''}`}>Chunk</span>
+                          </div>
+                          <div className="step-line" />
+                          <div className="step-item">
+                             <div className={`step-dot ${pendingUpload.stage === 3 ? 'active' : ''}`}></div>
+                             <span className={`step-label ${pendingUpload.stage === 3 ? 'active' : ''}`}>Index</span>
+                          </div>
+                       </div>
+                    ) : null}
+                  </div>
+
+                  <div className={`vault-badge ${pendingUpload.status === 'failed' ? 'failed' : 'processing'}`} style={{ alignSelf: 'flex-start' }}>
+                    {pendingUpload.status === 'failed' ? 'FAILED' : 'PROCESSING'}
+                  </div>
+                </motion.div>
+              )}
+
               {documents.map((doc) => (
                 <motion.div 
                   layout
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
                   key={doc._id} 
-                  className="doc-card glass"
+                  className="vault-doc-card"
+                  style={{ position: 'relative' }}
                 >
-                  <div className="doc-icon"><FileText size={24} /></div>
-                  <div className="doc-info">
-                    <h4>{doc.fileName}</h4>
-                    <div className="doc-meta">
-                      <span className={`status-tag ${doc.status}`}>{doc.status}</span>
-                      <span>• {(doc.fileSize / 1024 / 1024).toFixed(2)} MB</span>
+                  <div className="doc-icon-container">
+                    <FileText size={20} color="var(--electric-indigo)" />
+                  </div>
+                  
+                  <div className="doc-info-col">
+                    <h4>{doc.fileName || doc.title}</h4>
+                    <div className="doc-meta-text">
+                       {doc.fileName?.split('.').pop()?.toUpperCase() || 'DOC'} • {(doc.fileSize / 1024 / 1024).toFixed(1)} MB • {new Date(doc.createdAt).toLocaleDateString()}
                     </div>
                   </div>
-                  <button onClick={() => deleteDoc(doc._id)} className="delete-btn">
+
+                  <div className={`vault-badge ${doc.status?.toLowerCase() || 'processing'}`}>
+                    {doc.status || 'PROCESSING'}
+                  </div>
+
+                  <button 
+                    className="vault-trash-btn"
+                    onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(doc._id); }}
+                  >
                     <Trash2 size={18} />
                   </button>
+
+                  <AnimatePresence>
+                    {confirmDeleteId === doc._id && (
+                       <motion.div 
+                         initial={{ opacity: 0 }}
+                         animate={{ opacity: 1 }}
+                         exit={{ opacity: 0 }}
+                         className="delete-confirm-overlay"
+                       >
+                          <div className="delete-confirm-actions">
+                             <span>Remove document?</span>
+                             <button className="btn-confirm-del" onClick={() => deleteDoc(doc._id)}>Delete</button>
+                             <button className="btn-cancel-del" onClick={() => setConfirmDeleteId(null)}>Cancel</button>
+                          </div>
+                       </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
               ))}
-            </div>
-          )}
-        </div>
-      </div>
+            </AnimatePresence>
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };
